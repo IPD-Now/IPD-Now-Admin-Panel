@@ -15,6 +15,9 @@ import { useNavigate } from 'react-router-dom';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import HospitalIcon from '@mui/icons-material/LocalHospital';
+import { toast } from 'react-toastify';
+import { authenticateHospital } from '../firebase';
+import { useAuth } from '../context/AuthContext';
 
 const LoginWrapper = styled(Box)(({ theme }) => ({
   minHeight: '100vh',
@@ -101,22 +104,68 @@ const LoginButton = styled(Button)(({ theme }) => ({
 const Login = () => {
   const navigate = useNavigate();
   const theme = useTheme();
+  const { login } = useAuth();
   const [formData, setFormData] = useState({
     hospitalId: '',
     password: '',
   });
+  const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+  const validateForm = () => {
+    const newErrors = {};
+    if (!formData.hospitalId.trim()) {
+      newErrors.hospitalId = 'Hospital ID is required';
+    }
+    if (!formData.password) {
+      newErrors.password = 'Password is required';
+    } else if (formData.password.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters';
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    // Clear error when user types
+    if (errors[name]) {
+      setErrors(prev => ({
+        ...prev,
+        [name]: ''
+      }));
+    }
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    navigate('/dashboard');
+    
+    if (!validateForm()) {
+      return;
+    }
+
+    setLoading(true);
+    
+    try {
+      const hospitalData = await authenticateHospital(formData.hospitalId, formData.password);
+      login(hospitalData); // Use the auth context login
+      toast.success('Login successful!');
+      navigate('/dashboard');
+    } catch (error) {
+      toast.error(error.message);
+      // Clear password on error
+      setFormData(prev => ({
+        ...prev,
+        password: ''
+      }));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -164,8 +213,11 @@ const Login = () => {
               value={formData.hospitalId}
               onChange={handleChange}
               required
+              error={!!errors.hospitalId}
+              helperText={errors.hospitalId}
               variant="outlined"
               placeholder="Enter your hospital ID"
+              disabled={loading}
             />
             <StyledTextField
               fullWidth
@@ -175,14 +227,18 @@ const Login = () => {
               value={formData.password}
               onChange={handleChange}
               required
+              error={!!errors.password}
+              helperText={errors.password}
               variant="outlined"
               placeholder="Enter your password"
+              disabled={loading}
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
                     <IconButton
                       onClick={() => setShowPassword(!showPassword)}
                       edge="end"
+                      disabled={loading}
                     >
                       {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
                     </IconButton>
@@ -195,8 +251,9 @@ const Login = () => {
               fullWidth
               variant="contained"
               size="large"
+              disabled={loading}
             >
-              Sign In
+              {loading ? 'Signing In...' : 'Sign In'}
             </LoginButton>
           </Box>
 

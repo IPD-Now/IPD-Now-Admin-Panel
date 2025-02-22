@@ -19,7 +19,7 @@ export const PatientsProvider = ({ children }) => {
       admissionDate: new Date(),
       department,
       status: 'Admitted',
-      id: Date.now(),
+      id: patient.id || Date.now(),
     };
     setAdmittedPatients(prev => [newPatient, ...prev]);
   };

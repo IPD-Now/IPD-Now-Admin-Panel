@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -10,6 +11,7 @@ import {
   Grid,
   Card,
   CardContent,
+  LinearProgress,
 } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
@@ -18,8 +20,6 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import GroupsIcon from '@mui/icons-material/Groups';
 import UpdateIcon from '@mui/icons-material/Update';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
-
-const HOSPITAL_NAME = "City Hospital";
 
 const HospitalHeader = styled(Box)(({ theme }) => ({
   display: 'flex',
@@ -123,12 +123,32 @@ const services = [
 ];
 
 const About = () => {
+  const [hospitalName, setHospitalName] = useState('');
+  const [hospitalLogo, setHospitalLogo] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const name = localStorage.getItem('hospitalName');
+    const logo = localStorage.getItem('hospitalLogo');
+    setHospitalName(name || 'Hospital');
+    setHospitalLogo(logo || '/hospital-logo.png');
+    setLoading(false);
+  }, []);
+
+  if (loading) {
+    return (
+      <Box sx={{ width: '100%', mt: 2 }}>
+        <LinearProgress />
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ p: 3 }}>
       <HospitalHeader>
-        <Logo src="/hospital-logo.png" alt={HOSPITAL_NAME} />
+        <Logo src={hospitalLogo} alt={hospitalName} />
         <Typography variant="h3" align="center" sx={{ fontWeight: 700 }}>
-          {HOSPITAL_NAME}
+          {hospitalName}
         </Typography>
         <Typography variant="h6" align="center" color="text.secondary">
           Delivering Excellence in Healthcare
@@ -198,7 +218,7 @@ const About = () => {
 
       <Box sx={{ mt: 4, textAlign: 'center' }}>
         <Typography variant="caption" color="text.secondary">
-          © 2024 {HOSPITAL_NAME} | Powered by IPD Now | Developed by Shudveta
+          © 2024 {hospitalName} | Powered by IPD Now | Developed by Shudveta
         </Typography>
       </Box>
     </Box>

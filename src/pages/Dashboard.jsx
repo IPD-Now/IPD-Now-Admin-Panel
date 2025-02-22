@@ -9,7 +9,6 @@ import {
   styled,
   Chip,
   LinearProgress,
-  Fab,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -24,9 +23,10 @@ import {
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import RemoveRoundedIcon from '@mui/icons-material/RemoveRounded';
 import LocalHospitalRoundedIcon from '@mui/icons-material/LocalHospitalRounded';
-import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
 import { usePatientsContext } from '../context/PatientsContext';
+import { getDepartments, updateDepartmentBeds } from '../firebase';
+import { toast } from 'react-toastify';
 
 const DepartmentCard = styled(Card)(({ theme }) => ({
   height: '100%',
@@ -63,13 +63,6 @@ const BedCount = styled(Typography)(({ theme }) => ({
 const StyledChip = styled(Chip)(({ theme }) => ({
   borderRadius: theme.shape.borderRadius,
   fontWeight: 500,
-}));
-
-const FloatingFab = styled(Fab)(({ theme }) => ({
-  position: 'fixed',
-  bottom: 90,
-  right: 24,
-  zIndex: theme.zIndex.speedDial,
 }));
 
 const initialDepartments = [
@@ -131,6 +124,7 @@ const initialDepartments = [
 
 const Dashboard = () => {
   const [departments, setDepartments] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [newDepartment, setNewDepartment] = useState({
     name: '',
@@ -142,35 +136,88 @@ const Dashboard = () => {
   const { admittedPatients, dischargedPatients } = usePatientsContext();
 
   useEffect(() => {
+    const fetchDepartments = async () => {
+      try {
+        const hospitalId = localStorage.getItem('hospitalId');
+        if (!hospitalId) {
+          toast.error('Please login again');
+          return;
+        }
+        const fetchedDepartments = await getDepartments(hospitalId);
+        // Set initial status for each department
+        const departmentsWithStatus = fetchedDepartments.map(dept => ({
+          ...dept,
+          status: dept.availableBeds === 0 ? 'Full' : 'Active'
+        }));
+        setDepartments(departmentsWithStatus);
+      } catch (error) {
+        toast.error('Failed to fetch departments');
+        console.error(error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDepartments();
+  }, []);
+
+  useEffect(() => {
     if (departments.length > 0) {
       const updatedDepartments = departments.map(dept => {
-        const admittedCount = admittedPatients.filter(p => p.department === dept.name).length;
+        // Count admitted patients in this department
+        const admittedCount = admittedPatients.filter(p => p.department === dept.name && p.status === 'Admitted').length;
+        
+        // Calculate new available beds
+        const newAvailableBeds = Math.max(0, dept.totalBeds - admittedCount);
+        
         return {
           ...dept,
-          bedsAvailable: dept.totalBeds - admittedCount,
-          status: dept.totalBeds - admittedCount === 0 ? 'Full' : 'Active',
+          availableBeds: newAvailableBeds,
+          status: newAvailableBeds === 0 ? 'Full' : 'Active',
         };
       });
       setDepartments(updatedDepartments);
     }
   }, [admittedPatients, dischargedPatients]);
 
-  const handleBedCount = (id, increment) => {
-    setDepartments(departments.map(dept => {
-      if (dept.id === id) {
-        const newCount = Math.max(0, dept.bedsAvailable + (increment ? 1 : -1));
-        return {
-          ...dept,
-          bedsAvailable: Math.min(newCount, dept.totalBeds),
-          status: newCount === 0 ? 'Full' : 'Active',
-        };
-      }
-      return dept;
-    }));
+  const handleBedCount = async (id, increment) => {
+    const hospitalId = localStorage.getItem('hospitalId');
+    if (!hospitalId) {
+      toast.error('Please login again');
+      return;
+    }
+
+    const department = departments.find(dept => dept.id === id);
+    if (!department) return;
+
+    const newAvailable = Math.max(0, Math.min(department.availableBeds + (increment ? 1 : -1), department.totalBeds));
+
+    try {
+      await updateDepartmentBeds(hospitalId, id, newAvailable);
+      
+      setDepartments(departments.map(dept => {
+        if (dept.id === id) {
+          return {
+            ...dept,
+            availableBeds: newAvailable,
+            status: newAvailable === 0 ? 'Full' : 'Active',
+          };
+        }
+        return dept;
+      }));
+
+      toast.success(`Available beds ${increment ? 'increased' : 'decreased'}`);
+    } catch (error) {
+      toast.error('Failed to update bed count');
+      console.error(error);
+    }
   };
 
   const getBedUtilization = (available, total) => {
-    return ((total - available) / total) * 100;
+    if (!total) return 0;
+    const occupied = total - available;
+    const utilization = (occupied / total) * 100;
+    return Math.min(100, Math.max(0, utilization));
   };
 
   const validateDepartment = () => {
@@ -191,7 +238,7 @@ const Dashboard = () => {
     const newDept = {
       id: Date.now(),
       ...newDepartment,
-      bedsAvailable: parseInt(newDepartment.totalBeds),
+      availableBeds: parseInt(newDepartment.totalBeds),
       totalBeds: parseInt(newDepartment.totalBeds),
       status: 'Active',
     };
@@ -211,36 +258,14 @@ const Dashboard = () => {
   };
 
   return (
-    <Box>
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="h4" sx={{ fontWeight: 600 }}>
-          Department Details
-        </Typography>
-        <StyledChip
-          icon={<LocalHospitalRoundedIcon />}
-          label={`${departments.length} Departments`}
-          color="primary"
-          variant="outlined"
-        />
-      </Box>
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h4" gutterBottom sx={{ mb: 4 }}>
+        Department Overview
+      </Typography>
 
-      {departments.length === 0 ? (
-        <Box 
-          sx={{ 
-            textAlign: 'center', 
-            py: 8,
-            backgroundColor: 'background.paper',
-            borderRadius: 2,
-            border: '1px dashed',
-            borderColor: 'divider'
-          }}
-        >
-          <Typography variant="h6" color="text.secondary" gutterBottom>
-            No Departments Added
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Click the settings button to add departments
-          </Typography>
+      {loading ? (
+        <Box sx={{ width: '100%', mt: 2 }}>
+          <LinearProgress />
         </Box>
       ) : (
         <Grid container spacing={3}>
@@ -274,7 +299,7 @@ const Dashboard = () => {
                       </Typography>
                       <LinearProgress
                         variant="determinate"
-                        value={getBedUtilization(department.bedsAvailable, department.totalBeds)}
+                        value={getBedUtilization(department.availableBeds, department.totalBeds)}
                         sx={{ 
                           height: 8, 
                           borderRadius: 4,
@@ -290,7 +315,7 @@ const Dashboard = () => {
                         size="small"
                         color="primary"
                         onClick={() => handleBedCount(department.id, false)}
-                        disabled={department.bedsAvailable === 0}
+                        disabled={department.availableBeds === 0}
                         sx={{ 
                           backgroundColor: 'rgba(3, 123, 65, 0.1)',
                           '&:hover': {
@@ -302,7 +327,7 @@ const Dashboard = () => {
                       </IconButton>
                       
                       <BedCount>
-                        {department.bedsAvailable}
+                        {department.availableBeds}
                         <Typography variant="body2" color="text.secondary">
                           /{department.totalBeds}
                         </Typography>
@@ -312,7 +337,7 @@ const Dashboard = () => {
                         size="small"
                         color="primary"
                         onClick={() => handleBedCount(department.id, true)}
-                        disabled={department.bedsAvailable === department.totalBeds}
+                        disabled={department.availableBeds === department.totalBeds}
                         sx={{ 
                           backgroundColor: 'rgba(3, 123, 65, 0.1)',
                           '&:hover': {
@@ -330,14 +355,6 @@ const Dashboard = () => {
           ))}
         </Grid>
       )}
-
-      <FloatingFab
-        color="primary"
-        aria-label="settings"
-        onClick={() => setSettingsOpen(true)}
-      >
-        <SettingsRoundedIcon />
-      </FloatingFab>
 
       <Dialog
         open={settingsOpen}

@@ -15,6 +15,9 @@ import { format } from 'date-fns';
 import { useNotifications } from '../context/NotificationsContext';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ClearAllIcon from '@mui/icons-material/ClearAll';
+import { useAuth } from '../context/AuthContext';
+import { getHospitalDetails } from '../firebase';
+import { toast } from 'react-toastify';
 
 const HOSPITAL_NAME = 'City Hospital';
 
@@ -202,11 +205,31 @@ const StyledTime = styled(Typography)(({ theme }) => ({
 const Layout = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { logout } = useAuth();
   const [anchorEl, setAnchorEl] = useState(null);
   const [notificationAnchorEl, setNotificationAnchorEl] = useState(null);
   const { isDarkMode, toggleTheme } = useTheme();
   const { notifications, clearNotification, clearAllNotifications } = useNotifications();
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [hospitalDetails, setHospitalDetails] = useState(null);
+
+  useEffect(() => {
+    const fetchHospitalDetails = async () => {
+      try {
+        const hospitalId = localStorage.getItem('hospitalId');
+        if (!hospitalId) {
+          toast.error('Please login again');
+          return;
+        }
+        const details = await getHospitalDetails(hospitalId);
+        setHospitalDetails(details);
+      } catch (error) {
+        console.error('Error fetching hospital details:', error);
+      }
+    };
+
+    fetchHospitalDetails();
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -249,27 +272,48 @@ const Layout = () => {
     return name.charAt(0).toUpperCase();
   };
 
+  const handleLogout = () => {
+    handleMenuClose();
+    logout();
+  };
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column' }}>
       <Header elevation={0}>
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <Logo src="/hospital-logo.png" alt={HOSPITAL_NAME} size="large" />
-          <Box sx={{ ml: 1, display: { xs: 'none', sm: 'block' } }}>
-            <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary', lineHeight: 1.2 }}>
-              {HOSPITAL_NAME}
+          {hospitalDetails?.logoURL ? (
+            <Avatar
+              src={hospitalDetails.logoURL}
+              alt={hospitalDetails.name}
+              sx={{ 
+                width: 40, 
+                height: 40,
+                mr: 2,
+                border: theme => `1px solid ${theme.palette.divider}`
+              }}
+            />
+          ) : (
+            <Avatar
+              sx={{ 
+                width: 40, 
+                height: 40,
+                mr: 2,
+                bgcolor: 'primary.main'
+              }}
+            >
+              {hospitalDetails?.name?.charAt(0) || 'H'}
+            </Avatar>
+          )}
+          <Box>
+            <Typography variant="h6" color="text.primary" sx={{ fontWeight: 600, mb: 0, lineHeight: 1.1 }}>
+              {hospitalDetails?.name || 'Hospital Dashboard'}
             </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.1 }}>
               <Typography variant="caption" color="text.secondary">
                 Powered by
               </Typography>
               <Logo src="/ipd-now-logo.png" alt="IPD Now" size="small" sx={{ height: 14 }} />
-              <Typography 
-                variant="caption" 
-                sx={{ 
-                  fontWeight: 600,
-                  color: 'primary.main',
-                }}
-              >
+              <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main' }}>
                 IPD Now
               </Typography>
             </Box>
@@ -278,27 +322,22 @@ const Layout = () => {
 
         <HeaderActions>
           <StyledTime>
-            {currentTime.toLocaleTimeString('en-US', { 
-              hour: '2-digit',
-              minute: '2-digit',
-              second: '2-digit',
-              hour12: true 
-            })}
+            {format(currentTime, 'h:mm a')}
           </StyledTime>
+          
           <IconContainer>
             <StyledIconButton onClick={toggleTheme}>
               {isDarkMode ? <LightModeRoundedIcon /> : <DarkModeRoundedIcon />}
             </StyledIconButton>
+
             <StyledIconButton onClick={handleNotificationClick}>
-              <StyledBadge 
-                badgeContent={notifications.filter(n => !n.read).length} 
-                color="error"
-              >
+              <StyledBadge badgeContent={notifications.length} color="error">
                 <NotificationsRoundedIcon />
               </StyledBadge>
             </StyledIconButton>
+
             <StyledAvatar onClick={handleMenuClick}>
-              {getInitial(HOSPITAL_NAME)}
+              {getInitial(hospitalDetails?.name || 'H')}
             </StyledAvatar>
           </IconContainer>
 
@@ -391,7 +430,7 @@ const Layout = () => {
               sx: { minWidth: 160 }
             }}
           >
-            <MenuItem sx={{ color: 'error.main' }} onClick={handleMenuClose}>
+            <MenuItem sx={{ color: 'error.main' }} onClick={handleLogout}>
               <ListItemIcon>
                 <LogoutIcon fontSize="small" sx={{ color: 'error.main' }} />
               </ListItemIcon>

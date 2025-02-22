@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -8,6 +8,7 @@ import {
   styled,
   Snackbar,
   Alert,
+  LinearProgress,
 } from '@mui/material';
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
@@ -22,6 +23,8 @@ const FormField = styled(TextField)(({ theme }) => ({
 }));
 
 const Contact = () => {
+  const [hospitalName, setHospitalName] = useState('');
+  const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -34,6 +37,12 @@ const Contact = () => {
     message: '',
     severity: 'success',
   });
+
+  useEffect(() => {
+    const name = localStorage.getItem('hospitalName');
+    setHospitalName(name || 'Hospital');
+    setLoading(false);
+  }, []);
 
   const handleChange = (e) => {
     setFormData({
@@ -67,15 +76,23 @@ const Contact = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
+  if (loading) {
+    return (
+      <Box sx={{ width: '100%', mt: 2 }}>
+        <LinearProgress />
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4" align="center" gutterBottom sx={{ mb: 4 }}>
-        Contact Us
+        Contact IPD Now
       </Typography>
 
       <StyledPaper elevation={3}>
         <Typography variant="h6" gutterBottom>
-          Hospital Emergency Support
+          IPD Now Emergency Support
         </Typography>
         
         <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
