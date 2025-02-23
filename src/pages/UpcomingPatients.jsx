@@ -188,6 +188,8 @@ const UpcomingPatients = () => {
   const { admittedPatients, dischargedPatients, addPatient } = usePatientsContext();
   const [pdfOpen, setPdfOpen] = useState(false);
   const [selectedPdf, setSelectedPdf] = useState(null);
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
+  const [selectedPdfUrl, setSelectedPdfUrl] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -406,6 +408,15 @@ const UpcomingPatients = () => {
     }
     setSelectedPdf(pdfUrl);
     setPdfOpen(true);
+  };
+
+  const handleViewReport = (reportUrl) => {
+    if (!reportUrl) {
+      toast.error('No report available for this patient');
+      return;
+    }
+    setSelectedPdfUrl(reportUrl);
+    setPdfDialogOpen(true);
   };
 
   return (
@@ -681,6 +692,20 @@ const UpcomingPatients = () => {
                       <Typography className="label">Condition</Typography>
                       <Typography className="value">{selectedPatient.condition}</Typography>
                     </DetailField>
+
+                    {selectedPatient.reportFileURL && (
+                      <Box sx={{ mt: 2 }}>
+                        <Button
+                          variant="outlined"
+                          color="primary"
+                          startIcon={<PictureAsPdfIcon />}
+                          onClick={() => handleViewReport(selectedPatient.reportFileURL)}
+                          fullWidth
+                        >
+                          View Medical Report
+                        </Button>
+                      </Box>
+                    )}
                   </Box>
                 </DialogContent>
                 <DialogActions>
@@ -733,6 +758,41 @@ const UpcomingPatients = () => {
               )}
             </DialogContent>
           </PdfDialog>
+
+          {/* Add this new dialog for PDF viewing */}
+          <Dialog
+            open={pdfDialogOpen}
+            onClose={() => setPdfDialogOpen(false)}
+            maxWidth="lg"
+            fullWidth
+          >
+            <DialogTitle sx={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center' 
+            }}>
+              <Typography variant="h6">Medical Report</Typography>
+              <IconButton 
+                onClick={() => setPdfDialogOpen(false)}
+                size="small"
+              >
+                <ClearIcon />
+              </IconButton>
+            </DialogTitle>
+            <DialogContent sx={{ height: '80vh', p: 0 }}>
+              {selectedPdfUrl && (
+                <iframe
+                  src={selectedPdfUrl}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    border: 'none'
+                  }}
+                  title="PDF Viewer"
+                />
+              )}
+            </DialogContent>
+          </Dialog>
         </>
       )}
     </Box>

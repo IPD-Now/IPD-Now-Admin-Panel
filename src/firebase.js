@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, writeBatch } from 'firebase/firestore';
 import { getAnalytics } from "firebase/analytics";
 import { collection, doc, getDoc, getDocs, updateDoc, deleteDoc, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { toast } from 'react-toastify';
@@ -447,27 +447,18 @@ export const markNotificationAsRead = async (hospitalId, notificationId) => {
 // Clear all notifications
 export const clearAllNotifications = async (hospitalId) => {
   try {
-    if (!hospitalId) throw new Error('Hospital ID is required');
-
     const notificationsRef = collection(db, 'hospitals', hospitalId, 'notifications');
-    const q = query(notificationsRef, where('read', '==', false));
-    const snapshot = await getDocs(q);
+    const querySnapshot = await getDocs(notificationsRef);
     
-    if (snapshot.empty) return true;
-
-    const batch = db.batch();
-    snapshot.docs.forEach((doc) => {
-      const notificationRef = doc.ref;
-      batch.update(notificationRef, {
-        read: true,
-        updatedAt: serverTimestamp()
-      });
+    const batch = writeBatch(db);
+    querySnapshot.forEach((doc) => {
+      batch.delete(doc.ref);
     });
-    
+
     await batch.commit();
     return true;
   } catch (error) {
-    console.error('Error clearing notifications:', error);
+    console.error('Error clearing all notifications:', error);
     return false;
   }
 };

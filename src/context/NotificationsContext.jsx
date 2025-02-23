@@ -70,22 +70,25 @@ export const NotificationsProvider = ({ children }) => {
   const clearAllNotifications = useCallback(async () => {
     const hospitalId = localStorage.getItem('hospitalId');
     if (!hospitalId) {
-      console.error('No hospital ID found');
+      toast.error('No hospital ID found');
       return false;
     }
 
     try {
+      setIsLoading(true);
       const success = await clearFirebaseNotifications(hospitalId);
       if (success) {
-        // Clear all notifications from local state
         setNotifications([]);
-        toast.success('All notifications cleared');
         return true;
       }
+      toast.error('Failed to clear notifications');
       return false;
     } catch (error) {
       console.error('Error clearing all notifications:', error);
+      toast.error('Error clearing notifications');
       return false;
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
@@ -111,4 +114,4 @@ export const useNotifications = () => {
     throw new Error('useNotifications must be used within a NotificationsProvider');
   }
   return context;
-}; 
+};

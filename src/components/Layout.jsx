@@ -255,6 +255,13 @@ const Layout = () => {
     setNotificationAnchorEl(null);
   };
 
+  const handleClearAll = async () => {
+    const success = await clearAllNotifications();
+    if (success) {
+      handleNotificationClose(); // Close the menu after successful clearing
+    }
+  };
+
   const isActive = (path) => location.pathname === path;
 
   const navigationItems = [
@@ -368,7 +375,7 @@ const Layout = () => {
               {notifications.length > 0 && (
                 <IconButton 
                   size="small" 
-                  onClick={clearAllNotifications}
+                  onClick={handleClearAll}
                   title="Clear all notifications"
                 >
                   <ClearAllIcon fontSize="small" />
@@ -466,4 +473,4 @@ const Layout = () => {
   );
 };
 
-export default Layout; 
+export default Layout;
