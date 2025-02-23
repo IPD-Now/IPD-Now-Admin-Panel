@@ -51,25 +51,48 @@ const Contact = () => {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Here you would typically send the form data to your backend
-    console.log('Form submitted:', formData);
     
-    // Show success message
-    setSnackbar({
-      open: true,
-      message: 'Your message has been sent successfully!',
-      severity: 'success',
-    });
-    
-    // Clear form
-    setFormData({
-      name: '',
-      email: '',
-      phone: '',
-      message: '',
-    });
+    try {
+      // Replace with your Google Apps Script deployment URL
+      const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyPuPPrBb0lAuD_AXO1-nazDj_Tk8dovu9eqoNG2wpBFeBre3MvPumAK1n0rhkvnBxiew/exec';
+      
+      const dataToSend = {
+        hospitalName,
+        ...formData
+      };
+
+      const response = await fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify(dataToSend)
+      });
+
+      if (response.ok) {
+        setSnackbar({
+          open: true,
+          message: 'Your message has been sent successfully!',
+          severity: 'success',
+        });
+        
+        // Clear form
+        setFormData({
+          name: '',
+          email: '',
+          phone: '',
+          message: '',
+        });
+      } else {
+        throw new Error('Failed to submit form');
+      }
+    } catch (error) {
+      console.error('Error submitting form:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to send message. Please try again.',
+        severity: 'error',
+      });
+    }
   };
 
   const handleCloseSnackbar = () => {
@@ -175,4 +198,4 @@ const Contact = () => {
   );
 };
 
-export default Contact; 
+export default Contact;

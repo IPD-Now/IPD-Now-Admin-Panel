@@ -43,6 +43,7 @@ import { getUpcomingPatients, admitPatient, dischargePatient, subscribeToUpcomin
 import { toast } from 'react-toastify';
 import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
+import { useNavigate } from 'react-router-dom';
 
 const StyledListItem = styled(ListItem)(({ theme }) => ({
   marginBottom: theme.spacing(2),
@@ -187,40 +188,49 @@ const UpcomingPatients = () => {
   const { admittedPatients, dischargedPatients, addPatient } = usePatientsContext();
   const [pdfOpen, setPdfOpen] = useState(false);
   const [selectedPdf, setSelectedPdf] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
+    const checkAuth = () => {
+      const isAuthenticated = localStorage.getItem('isAuthenticated');
+      const hospitalId = localStorage.getItem('hospitalId');
+      
+      if (!isAuthenticated || !hospitalId) {
+        toast.error('Please login to continue');
+        navigate('/login');
+        return false;
+      }
+      return true;
+    };
+
+    if (!checkAuth()) return;
+
     const hospitalId = localStorage.getItem('hospitalId');
-    if (!hospitalId) {
-      toast.error('Please login again');
-      setLoading(false);
-      return;
-    }
+    setLoading(true);
 
     // Set up real-time listener for patients
     const unsubscribe = subscribeToUpcomingPatients(hospitalId, (updatedPatients) => {
-      // Set default status if not present
-      const patientsWithStatus = updatedPatients.map(patient => ({
-        ...patient,
-        status: patient.status || 'Upcoming'
-      }));
-      setPatients(patientsWithStatus);
-      setLoading(false);
-
-      // Create notifications for new patients
-      updatedPatients.forEach(patient => {
-        if (!patients.some(p => p.id === patient.id)) {
-          addNotification({
-            title: 'New Patient Arrival',
-            message: `${patient.name} has arrived for ${patient.department}`,
-          });
-        }
-      });
+      try {
+        // Set default status if not present
+        const patientsWithStatus = updatedPatients.map(patient => ({
+          ...patient,
+          status: patient.status || 'Upcoming',
+          department: patient.department || 'Unknown',
+          name: patient.name || 'Unknown Patient'
+        }));
+        setPatients(patientsWithStatus);
+      } catch (error) {
+        console.error('Error processing patients:', error);
+        toast.error('Error updating patient list');
+      } finally {
+        setLoading(false);
+      }
     });
 
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, []);
+  }, [navigate]);
 
   const handleAdmit = async (patient) => {
     try {
@@ -729,4 +739,4 @@ const UpcomingPatients = () => {
   );
 };
 
-export default UpcomingPatients; 
+export default UpcomingPatients;

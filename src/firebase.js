@@ -39,7 +39,6 @@ export const authenticateHospital = async (hospitalId, password) => {
       throw new Error('Hospital ID and password are required');
     }
 
-    // Get hospital document
     const hospitalRef = doc(db, 'hospitals', hospitalId);
     const hospitalDoc = await getDoc(hospitalRef);
 
@@ -49,34 +48,25 @@ export const authenticateHospital = async (hospitalId, password) => {
 
     const hospitalData = hospitalDoc.data();
 
-    // In a real implementation, we would use a proper password hashing library
-    // and compare hashed passwords. For now, we'll use a simple comparison
-    // TODO: Implement proper password hashing
-    if (hospitalData.masterPassword !== password) {
-      // Use a generic error message for security
+    if (!hospitalData || hospitalData.masterPassword !== password) {
       throw new Error('Invalid credentials');
     }
 
-    // Store minimal data in localStorage
+    // Store essential data in localStorage
     localStorage.setItem('hospitalId', hospitalId);
-    localStorage.setItem('hospitalName', hospitalData.name);
-    if (hospitalData.logoURL) {
-      localStorage.setItem('hospitalLogo', hospitalData.logoURL);
-    }
+    localStorage.setItem('hospitalName', hospitalData.name || '');
+    localStorage.setItem('isAuthenticated', 'true');
 
-    // Return minimal data needed for the app
     return {
       id: hospitalId,
-      name: hospitalData.name,
-      logoURL: hospitalData.logoURL || null
+      name: hospitalData.name || '',
+      logoURL: hospitalData.logoURL || null,
+      isAuthenticated: true
     };
   } catch (error) {
+    localStorage.clear(); // Clear any partial data
     console.error('Authentication error:', error);
-    // Throw generic error messages for security
-    if (error.message === 'Hospital not found' || error.message === 'Invalid credentials') {
-      throw new Error('Invalid credentials');
-    }
-    throw new Error('Authentication failed. Please try again later.');
+    throw new Error(error.message || 'Authentication failed');
   }
 };
 
@@ -99,14 +89,46 @@ export const getHospitalDetails = async (hospitalId) => {
 // Department Operations
 export const getDepartments = async (hospitalId) => {
   try {
+    if (!hospitalId) {
+      throw new Error('Hospital ID is required');
+    }
+
     const departmentsRef = collection(db, 'hospitals', hospitalId, 'departments');
     const departmentsSnapshot = await getDocs(departmentsRef);
+    
+    if (departmentsSnapshot.empty) {
+      // If no departments exist, create default ones
+      const defaultDepartments = [
+        { name: 'General Medicine', totalBeds: 20, availableBeds: 20 },
+        { name: 'Emergency', totalBeds: 10, availableBeds: 10 },
+        { name: 'ICU', totalBeds: 5, availableBeds: 5 }
+      ];
+
+      const batch = db.batch();
+      
+      for (const dept of defaultDepartments) {
+        const newDeptRef = doc(departmentsRef);
+        batch.set(newDeptRef, {
+          ...dept,
+          createdAt: serverTimestamp(),
+          status: 'Active'
+        });
+      }
+
+      await batch.commit();
+      return defaultDepartments.map((dept, index) => ({
+        id: `default-${index}`,
+        ...dept
+      }));
+    }
+
     return departmentsSnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
   } catch (error) {
-    throw error;
+    console.error('Error getting departments:', error);
+    throw new Error('Failed to load departments. Please try again.');
   }
 };
 
@@ -125,14 +147,41 @@ export const updateDepartmentBeds = async (hospitalId, departmentId, newTotal) =
 // Upcoming Patients Operations
 export const getUpcomingPatients = async (hospitalId) => {
   try {
+    if (!hospitalId) {
+      throw new Error('Hospital ID is required');
+    }
+
     const patientsRef = collection(db, 'hospitals', hospitalId, 'upcomingPatients');
     const patientsSnapshot = await getDocs(patientsRef);
+
+    if (patientsSnapshot.empty) {
+      // Create a sample patient if none exist
+      const samplePatient = {
+        name: 'Sample Patient',
+        age: 45,
+        department: 'General Medicine',
+        condition: 'Regular Checkup',
+        status: 'Upcoming',
+        createdAt: new Date().toISOString(),
+        appointmentTime: '10:00 AM'
+      };
+
+      const newPatientRef = doc(patientsRef);
+      await setDoc(newPatientRef, samplePatient);
+
+      return [{
+        id: newPatientRef.id,
+        ...samplePatient
+      }];
+    }
+
     return patientsSnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
   } catch (error) {
-    throw error;
+    console.error('Error getting patients:', error);
+    throw new Error('Failed to load patients. Please try again.');
   }
 };
 
@@ -281,38 +330,39 @@ export const dischargePatient = async (hospitalId, patientId) => {
 
 // Real-time Upcoming Patients Listener
 export const subscribeToUpcomingPatients = (hospitalId, callback) => {
-  const patientsRef = collection(db, 'hospitals', hospitalId, 'upcomingPatients');
-  const q = query(patientsRef);
-  
-  return onSnapshot(q, (snapshot) => {
-    const patients = [];
-    snapshot.forEach((doc) => {
-      const data = doc.data();
-      
-      // Handle different timestamp fields
-      let timestamp;
-      if (data.timestamp?.toDate) {
-        timestamp = data.timestamp.toDate();
-      } else if (data.createdAt) {
-        timestamp = new Date(data.createdAt);
-      } else {
-        timestamp = new Date();
-      }
+  if (!hospitalId) {
+    console.error('Hospital ID is required');
+    return () => {};
+  }
 
-      patients.push({
-        id: doc.id,
-        ...data,
-        timestamp
-      });
-    });
-    
-    // Sort by timestamp, newest first
-    patients.sort((a, b) => b.timestamp - a.timestamp);
-    callback(patients);
-  }, (error) => {
-    console.error('Error listening to patients:', error);
-    toast.error('Error updating patient list');
-  });
+  try {
+    const patientsRef = collection(db, 'hospitals', hospitalId, 'upcomingPatients');
+    const unsubscribe = onSnapshot(patientsRef, 
+      (snapshot) => {
+        const patients = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          timestamp: doc.data().timestamp?.toDate() || new Date(),
+          // Ensure required fields have default values
+          status: doc.data().status || 'Upcoming',
+          department: doc.data().department || 'Unknown',
+          name: doc.data().name || 'Unknown Patient'
+        }));
+        callback(patients);
+      },
+      (error) => {
+        console.error('Error in patients subscription:', error);
+        // Don't throw error, just notify user
+        toast.error('Error updating patient list');
+      }
+    );
+
+    return unsubscribe;
+  } catch (error) {
+    console.error('Error setting up patients subscription:', error);
+    toast.error('Error connecting to database');
+    return () => {};
+  }
 };
 
 // Real-time Notifications Listener
@@ -420,4 +470,4 @@ export const clearAllNotifications = async (hospitalId) => {
     console.error('Error clearing notifications:', error);
     return false;
   }
-}; 
+};

@@ -27,6 +27,7 @@ import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
 import { usePatientsContext } from '../context/PatientsContext';
 import { getDepartments, updateDepartmentBeds } from '../firebase';
 import { toast } from 'react-toastify';
+import { useNavigate } from 'react-router-dom';
 
 const DepartmentCard = styled(Card)(({ theme }) => ({
   height: '100%',
@@ -134,32 +135,44 @@ const Dashboard = () => {
   });
   const [errors, setErrors] = useState({});
   const { admittedPatients, dischargedPatients } = usePatientsContext();
+  const navigate = useNavigate();
 
   useEffect(() => {
+    const checkAuth = () => {
+      const isAuthenticated = localStorage.getItem('isAuthenticated');
+      const hospitalId = localStorage.getItem('hospitalId');
+      
+      if (!isAuthenticated || !hospitalId) {
+        toast.error('Please login to continue');
+        navigate('/login');
+        return false;
+      }
+      return true;
+    };
+
     const fetchDepartments = async () => {
+      if (!checkAuth()) return;
+      
+      setLoading(true);
       try {
         const hospitalId = localStorage.getItem('hospitalId');
-        if (!hospitalId) {
-          toast.error('Please login again');
-          return;
-        }
         const fetchedDepartments = await getDepartments(hospitalId);
-        // Set initial status for each department
         const departmentsWithStatus = fetchedDepartments.map(dept => ({
           ...dept,
           status: dept.availableBeds === 0 ? 'Full' : 'Active'
         }));
         setDepartments(departmentsWithStatus);
       } catch (error) {
-        toast.error('Failed to fetch departments');
-        console.error(error);
+        console.error('Error fetching departments:', error);
+        toast.error('Failed to load departments');
+        setDepartments([]);
       } finally {
         setLoading(false);
       }
     };
 
     fetchDepartments();
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     if (departments.length > 0) {
@@ -453,4 +466,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard; 
+export default Dashboard;

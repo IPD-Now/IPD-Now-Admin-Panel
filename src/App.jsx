@@ -24,7 +24,6 @@ function App() {
               <CssBaseline />
               <ToastContainer position="bottom-center" />
               <Routes>
-                <Route path="/" element={<Navigate to="/login" replace />} />
                 <Route path="/login" element={<Login />} />
                 
                 <Route
@@ -35,11 +34,15 @@ function App() {
                     </ProtectedRoute>
                   }
                 >
-                  <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="/upcoming-patients" element={<UpcomingPatients />} />
-                  <Route path="/about" element={<About />} />
-                  <Route path="/contact" element={<Contact />} />
+                  <Route index element={<Navigate to="/dashboard" replace />} />
+                  <Route path="dashboard" element={<Dashboard />} />
+                  <Route path="upcoming-patients" element={<UpcomingPatients />} />
+                  <Route path="about" element={<About />} />
+                  <Route path="contact" element={<Contact />} />
                 </Route>
+
+                {/* Catch all route - redirect to dashboard if authenticated, login if not */}
+                <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Routes>
             </AuthProvider>
           </Router>
