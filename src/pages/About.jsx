@@ -218,11 +218,25 @@ const About = () => {
 
       <Box sx={{ mt: 4, textAlign: 'center' }}>
         <Typography variant="caption" color="text.secondary">
-          © 2024 {hospitalName} | Powered by IPD Now | Developed by Shudveta
+          © 2024 {hospitalName} | Powered by IPD Now | Developed by <a 
+            href="https://shudveta.in" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            style={{ 
+              color: 'inherit',
+              textDecoration: 'none',
+              fontWeight: 600,
+              '&:hover': {
+                textDecoration: 'underline'
+              }
+            }}
+          >
+            Shudveta
+          </a>
         </Typography>
       </Box>
     </Box>
   );
 };
 
-export default About; 
+export default About;

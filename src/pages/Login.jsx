@@ -262,7 +262,21 @@ const Login = () => {
             color="text.secondary" 
             sx={{ mt: 4, textAlign: 'center', display: 'block' }}
           >
-            © 2024 IPD Now | Developed by Shudveta
+            © 2024 IPD Now | Developed by <a 
+              href="https://shudveta.in" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              style={{ 
+                color: 'inherit',
+                textDecoration: 'none',
+                fontWeight: 600,
+                '&:hover': {
+                  textDecoration: 'underline'
+                }
+              }}
+            >
+              Shudveta
+            </a>
           </Typography>
         </StyledPaper>
       </Container>
@@ -270,4 +284,4 @@ const Login = () => {
   );
 };
 
-export default Login; 
+export default Login;

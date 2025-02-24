@@ -13,8 +13,25 @@ import { PatientsProvider } from './context/PatientsContext';
 import { ToastContainer } from 'react-toastify';
 import { CssBaseline } from '@mui/material';
 import 'react-toastify/dist/ReactToastify.css';
+import { useState, useEffect } from 'react';
+import LoadingScreen from './components/LoadingScreen';
 
 function App() {
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // Simulate initial app loading
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
+
   return (
     <ThemeProvider>
       <NotificationsProvider>
