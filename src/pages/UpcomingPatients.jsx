@@ -261,6 +261,15 @@ const UpcomingPatients = () => {
 
       // Now admit the patient
       await admitPatient(hospitalId, patient.id);
+
+      // Update status in user's Bookings collection - using the correct path structure
+      if (patient.userId && patient.bookingId) {
+        const userBookingRef = doc(db, 'Users', patient.userId, 'Bookings', patient.bookingId);
+        await updateDoc(userBookingRef, {
+          status: 'Admitted',
+          admissionDateTime: new Date().toISOString()
+        });
+      }
       
       addNotification({
         title: 'Patient Admitted',
@@ -297,6 +306,15 @@ const UpcomingPatients = () => {
       }
 
       await dischargePatient(hospitalId, patientId);
+
+      // Update status in user's Bookings collection - using the correct path structure
+      if (patient.userId && patient.bookingId) {
+        const userBookingRef = doc(db, 'Users', patient.userId, 'Bookings', patient.bookingId);
+        await updateDoc(userBookingRef, {
+          status: 'Discharged',
+          dischargeDateTime: new Date().toISOString()
+        });
+      }
       
       addNotification({
         title: 'Patient Discharged',
@@ -309,8 +327,8 @@ const UpcomingPatients = () => {
       // Switch to Discharged tab
       setTabValue(2);
     } catch (error) {
+      console.error('Discharge error:', error);
       toast.error('Failed to discharge patient');
-      console.error(error);
     }
   };
 
@@ -530,7 +548,7 @@ const UpcomingPatients = () => {
                         </Typography>
                         <br />
                         <Typography variant="caption" color="text.secondary">
-                          Arrived: {patient.createdAt ? formatDate(null, patient.createdAt) : formatDate(patient.timestamp)}
+                          Arrived: {patient.timestamp ? formatDate(patient.timestamp) : patient.createdAt}
                         </Typography>
                       </Box>
                     }
@@ -593,6 +611,13 @@ const UpcomingPatients = () => {
                       size="small"
                     />
                     <ActionButton
+                      variant="outlined"
+                      color="primary"
+                      onClick={() => handleViewDetails(patient)}
+                    >
+                      Details
+                    </ActionButton>
+                    <ActionButton
                       variant="contained"
                       color="error"
                       onClick={() => handleDischarge(patient.id)}
@@ -642,6 +667,13 @@ const UpcomingPatients = () => {
                       status="Discharged"
                       size="small"
                     />
+                    <ActionButton
+                      variant="outlined"
+                      color="primary"
+                      onClick={() => handleViewDetails(patient)}
+                    >
+                      Details
+                    </ActionButton>
                   </Box>
                 </StyledListItem>
               ))}
@@ -663,24 +695,13 @@ const UpcomingPatients = () => {
                 </DialogTitle>
                 <DialogContent dividers>
                   <Box sx={{ py: 2 }}>
+                    {/* Personal Information */}
+                    <Typography variant="h6" gutterBottom color="primary" sx={{ mb: 2 }}>
+                      Personal Information
+                    </Typography>
                     <DetailField>
                       <Typography className="label">Name</Typography>
                       <Typography className="value">{selectedPatient.name}</Typography>
-                    </DetailField>
-
-                    <DetailField>
-                      <Typography className="label">Department</Typography>
-                      <Typography className="value">{selectedPatient.department}</Typography>
-                    </DetailField>
-
-                    <DetailField>
-                      <Typography className="label">Phone Number</Typography>
-                      <Typography className="value">{selectedPatient.phoneNumber}</Typography>
-                    </DetailField>
-
-                    <DetailField>
-                      <Typography className="label">Emergency Contact</Typography>
-                      <Typography className="value">{selectedPatient.emergencyContact}</Typography>
                     </DetailField>
 
                     <DetailField>
@@ -689,23 +710,210 @@ const UpcomingPatients = () => {
                     </DetailField>
 
                     <DetailField>
-                      <Typography className="label">Condition</Typography>
-                      <Typography className="value">{selectedPatient.condition}</Typography>
+                      <Typography className="label">Phone Number</Typography>
+                      <Typography className="value">{selectedPatient.phoneNumber}</Typography>
                     </DetailField>
 
-                    {selectedPatient.reportFileURL && (
-                      <Box sx={{ mt: 2 }}>
-                        <Button
-                          variant="outlined"
-                          color="primary"
-                          startIcon={<PictureAsPdfIcon />}
-                          onClick={() => handleViewReport(selectedPatient.reportFileURL)}
-                          fullWidth
-                        >
-                          View Medical Report
-                        </Button>
+                    <DetailField>
+                      <Typography className="label">Address</Typography>
+                      <Typography className="value">{selectedPatient.address}</Typography>
+                    </DetailField>
+
+                    <DetailField>
+                      <Typography className="label">Emergency Contact</Typography>
+                      <Typography className="value">{selectedPatient.emergencyContact}</Typography>
+                    </DetailField>
+
+                    <DetailField>
+                      <Typography className="label">User ID</Typography>
+                      <Typography className="value">{selectedPatient.userId}</Typography>
+                    </DetailField>
+
+                    {/* Department Information */}
+                    <Typography variant="h6" gutterBottom color="primary" sx={{ mt: 4, mb: 2 }}>
+                      Department Information
+                    </Typography>
+                    <DetailField>
+                      <Typography className="label">Department</Typography>
+                      <Typography className="value">{selectedPatient.department}</Typography>
+                    </DetailField>
+
+                    <DetailField>
+                      <Typography className="label">Department ID</Typography>
+                      <Typography className="value">{selectedPatient.departmentId}</Typography>
+                    </DetailField>
+
+                    <DetailField>
+                      <Typography className="label">Hospital Name</Typography>
+                      <Typography className="value">{selectedPatient.hospitalName}</Typography>
+                    </DetailField>
+
+                    <DetailField>
+                      <Typography className="label">Hospital ID</Typography>
+                      <Typography className="value">{selectedPatient.hospitalId}</Typography>
+                    </DetailField>
+
+                    {/* Medical Information */}
+                    <Typography variant="h6" gutterBottom color="primary" sx={{ mt: 4, mb: 2 }}>
+                      Medical Information
+                    </Typography>
+                    <DetailField>
+                      <Typography className="label">Condition</Typography>
+                      <Typography className="value">{selectedPatient.condition || 'Not specified'}</Typography>
+                    </DetailField>
+
+                    <Box sx={{ mb: 3 }}>
+                      <Typography className="label" gutterBottom>Medical History</Typography>
+                      <Box sx={{ pl: 2 }}>
+                        <DetailField>
+                          <Typography className="label">Allergies</Typography>
+                          <Typography className="value">{selectedPatient.medicalHistory?.allergies || 'None'}</Typography>
+                        </DetailField>
+                        <DetailField>
+                          <Typography className="label">Conditions</Typography>
+                          <Typography className="value">{selectedPatient.medicalHistory?.conditions || 'None'}</Typography>
+                        </DetailField>
+                        <DetailField>
+                          <Typography className="label">Family History</Typography>
+                          <Typography className="value">{selectedPatient.medicalHistory?.familyHistory || 'None'}</Typography>
+                        </DetailField>
+                        <DetailField>
+                          <Typography className="label">Medications</Typography>
+                          <Typography className="value">{selectedPatient.medicalHistory?.medications || 'None'}</Typography>
+                        </DetailField>
+                        <DetailField>
+                          <Typography className="label">Surgeries</Typography>
+                          <Typography className="value">{selectedPatient.medicalHistory?.surgeries || 'None'}</Typography>
+                        </DetailField>
                       </Box>
+                    </Box>
+
+                    {/* Ambulance Information */}
+                    {selectedPatient.withAmbulance && (
+                      <>
+                        <Typography variant="h6" gutterBottom color="primary" sx={{ mt: 4, mb: 2 }}>
+                          Ambulance Details
+                        </Typography>
+                        <DetailField>
+                          <Typography className="label">Ambulance Call ID</Typography>
+                          <Typography className="value">{selectedPatient.ambulanceCallId}</Typography>
+                        </DetailField>
+                        <DetailField>
+                          <Typography className="label">Status</Typography>
+                          <Typography className="value">{selectedPatient.ambulanceDetails?.status}</Typography>
+                        </DetailField>
+                        <DetailField>
+                          <Typography className="label">Call Time</Typography>
+                          <Typography className="value">{selectedPatient.ambulanceDetails?.callTime}</Typography>
+                        </DetailField>
+                        <DetailField>
+                          <Typography className="label">Request ID</Typography>
+                          <Typography className="value">{selectedPatient.ambulanceDetails?.requestId}</Typography>
+                        </DetailField>
+                      </>
                     )}
+
+                    {/* Timestamps */}
+                    <Typography variant="h6" gutterBottom color="primary" sx={{ mt: 4, mb: 2 }}>
+                      Time Information
+                    </Typography>
+                    <DetailField>
+                      <Typography className="label">Created At</Typography>
+                      <Typography className="value">{selectedPatient.timestamp ? formatDate(selectedPatient.timestamp) : selectedPatient.createdAt}</Typography>
+                    </DetailField>
+                    {selectedPatient.status === 'Admitted' && (
+                      <DetailField>
+                        <Typography className="label">Admission Date</Typography>
+                        <Typography className="value">{formatDate(selectedPatient.admissionDate, selectedPatient.admissionDateTime)}</Typography>
+                      </DetailField>
+                    )}
+                    {selectedPatient.status === 'Discharged' && (
+                      <>
+                        <DetailField>
+                          <Typography className="label">Admission Date</Typography>
+                          <Typography className="value">{formatDate(selectedPatient.admissionDate, selectedPatient.admissionDateTime)}</Typography>
+                        </DetailField>
+                        <DetailField>
+                          <Typography className="label">Discharge Date</Typography>
+                          <Typography className="value">{formatDate(selectedPatient.dischargeDate, selectedPatient.dischargeDateTime)}</Typography>
+                        </DetailField>
+                      </>
+                    )}
+                    <DetailField>
+                      <Typography className="label">Last Updated</Typography>
+                      <Typography className="value">{selectedPatient.updatedAt}</Typography>
+                    </DetailField>
+
+                    {/* Location Information */}
+                    <Typography variant="h6" gutterBottom color="primary" sx={{ mt: 4, mb: 2 }}>
+                      Location Information
+                    </Typography>
+                    <DetailField>
+                      <Typography className="label">Latitude</Typography>
+                      <Typography className="value">{selectedPatient.latitude}</Typography>
+                    </DetailField>
+                    <DetailField>
+                      <Typography className="label">Longitude</Typography>
+                      <Typography className="value">{selectedPatient.longitude}</Typography>
+                    </DetailField>
+
+                    {/* Medical Reports */}
+                    {(selectedPatient.reportFileURL1 || selectedPatient.reportFileURL2) && (
+                      <>
+                        <Typography variant="h6" gutterBottom color="primary" sx={{ mt: 4, mb: 2 }}>
+                          Medical Reports
+                        </Typography>
+                        {selectedPatient.reportFileURL1 && (
+                          <Box sx={{ mb: 2 }}>
+                            <Button
+                              variant="outlined"
+                              color="primary"
+                              startIcon={<PictureAsPdfIcon />}
+                              onClick={() => handleViewReport(selectedPatient.reportFileURL1)}
+                              fullWidth
+                            >
+                              View Medical Report 1
+                            </Button>
+                          </Box>
+                        )}
+                        {selectedPatient.reportFileURL2 && (
+                          <Box sx={{ mb: 2 }}>
+                            <Button
+                              variant="outlined"
+                              color="primary"
+                              startIcon={<PictureAsPdfIcon />}
+                              onClick={() => handleViewReport(selectedPatient.reportFileURL2)}
+                              fullWidth
+                            >
+                              View Medical Report 2
+                            </Button>
+                          </Box>
+                        )}
+                      </>
+                    )}
+
+                    {/* Booking Information */}
+                    <Typography variant="h6" gutterBottom color="primary" sx={{ mt: 4, mb: 2 }}>
+                      Booking Information
+                    </Typography>
+                    <DetailField>
+                      <Typography className="label">Booking ID</Typography>
+                      <Typography className="value">{selectedPatient.bookingId}</Typography>
+                    </DetailField>
+                    <DetailField>
+                      <Typography className="label">Status</Typography>
+                      <Typography className="value">
+                        <Chip 
+                          label={selectedPatient.status} 
+                          color={
+                            selectedPatient.status === 'Admitted' ? 'success' : 
+                            selectedPatient.status === 'Discharged' ? 'error' : 
+                            'default'
+                          }
+                          size="small"
+                        />
+                      </Typography>
+                    </DetailField>
                   </Box>
                 </DialogContent>
                 <DialogActions>

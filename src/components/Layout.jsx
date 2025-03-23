@@ -18,6 +18,7 @@ import ClearAllIcon from '@mui/icons-material/ClearAll';
 import { useAuth } from '../context/AuthContext';
 import { getHospitalDetails } from '../firebase';
 import { toast } from 'react-toastify';
+import NotificationPanel from './NotificationPanel';
 
 const HOSPITAL_NAME = 'City Hospital';
 
@@ -212,6 +213,7 @@ const Layout = () => {
   const { notifications, clearNotification, clearAllNotifications } = useNotifications();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [hospitalDetails, setHospitalDetails] = useState(null);
+  const isLoginPage = location.pathname === '/login';
 
   useEffect(() => {
     const fetchHospitalDetails = async () => {

@@ -2,7 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, writeBatch } from 'firebase/firestore';
 import { getAnalytics } from "firebase/analytics";
-import { collection, doc, getDoc, getDocs, updateDoc, deleteDoc, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, updateDoc, deleteDoc, query, where, onSnapshot, addDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { toast } from 'react-toastify';
 import dayjs from 'dayjs';
 
@@ -39,6 +39,12 @@ export const authenticateHospital = async (hospitalId, password) => {
       throw new Error('Hospital ID and password are required');
     }
 
+    // Check if there's a locked hospital ID
+    const lockedHospitalId = localStorage.getItem('lockedHospitalId');
+    if (lockedHospitalId && hospitalId !== lockedHospitalId) {
+      throw new Error('This device is locked to a different Hospital ID. Please use the locked Hospital ID.');
+    }
+
     const hospitalRef = doc(db, 'hospitals', hospitalId);
     const hospitalDoc = await getDoc(hospitalRef);
 
@@ -57,6 +63,11 @@ export const authenticateHospital = async (hospitalId, password) => {
     localStorage.setItem('hospitalName', hospitalData.name || '');
     localStorage.setItem('isAuthenticated', 'true');
 
+    // If this is the first successful login, lock the hospital ID
+    if (!lockedHospitalId) {
+      localStorage.setItem('lockedHospitalId', hospitalId);
+    }
+
     return {
       id: hospitalId,
       name: hospitalData.name || '',
@@ -64,7 +75,12 @@ export const authenticateHospital = async (hospitalId, password) => {
       isAuthenticated: true
     };
   } catch (error) {
-    localStorage.clear(); // Clear any partial data
+    // Don't clear lockedHospitalId on authentication failure
+    const lockedHospitalId = localStorage.getItem('lockedHospitalId');
+    localStorage.clear();
+    if (lockedHospitalId) {
+      localStorage.setItem('lockedHospitalId', lockedHospitalId);
+    }
     console.error('Authentication error:', error);
     throw new Error(error.message || 'Authentication failed');
   }
@@ -132,11 +148,11 @@ export const getDepartments = async (hospitalId) => {
   }
 };
 
-export const updateDepartmentBeds = async (hospitalId, departmentId, newTotal) => {
+export const updateDepartmentBeds = async (hospitalId, departmentId, newAvailable) => {
   try {
     const departmentRef = doc(db, 'hospitals', hospitalId, 'departments', departmentId);
     await updateDoc(departmentRef, {
-      totalBeds: newTotal
+      availableBeds: newAvailable
     });
     return true;
   } catch (error) {
@@ -460,5 +476,99 @@ export const clearAllNotifications = async (hospitalId) => {
   } catch (error) {
     console.error('Error clearing all notifications:', error);
     return false;
+  }
+};
+
+// Update Hospital Details
+export const updateHospitalDetails = async (hospitalId, details) => {
+  try {
+    if (!hospitalId) {
+      throw new Error('Hospital ID is required');
+    }
+
+    const hospitalRef = doc(db, 'hospitals', hospitalId);
+    await updateDoc(hospitalRef, {
+      ...details,
+      updatedAt: serverTimestamp()
+    });
+
+    return true;
+  } catch (error) {
+    console.error('Error updating hospital details:', error);
+    throw new Error('Failed to update hospital details');
+  }
+};
+
+// Add New Department
+export const addDepartment = async (hospitalId, departmentName, departmentData) => {
+  try {
+    const departmentRef = doc(db, `hospitals/${hospitalId}/departments/${departmentName}`);
+    const departmentDoc = await getDoc(departmentRef);
+
+    if (departmentDoc.exists()) {
+      throw new Error('Department already exists');
+    }
+
+    // Create the document with the department name as both ID and name field
+    await setDoc(departmentRef, {
+      name: departmentName,  // Explicitly set the name field
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      ...departmentData  // Spread any additional data
+    });
+
+    return departmentName; // Return the document ID (same as department name)
+  } catch (error) {
+    console.error('Error adding department:', error);
+    throw error;
+  }
+};
+
+// Update Department
+export const updateDepartment = async (hospitalId, departmentId, departmentData) => {
+  try {
+    if (!hospitalId || !departmentId) {
+      throw new Error('Hospital ID and Department ID are required');
+    }
+
+    const departmentRef = doc(db, 'hospitals', hospitalId, 'departments', departmentId);
+    await updateDoc(departmentRef, {
+      ...departmentData,
+      updatedAt: serverTimestamp()
+    });
+
+    return true;
+  } catch (error) {
+    console.error('Error updating department:', error);
+    throw new Error('Failed to update department');
+  }
+};
+
+// Delete Department
+export const deleteDepartment = async (hospitalId, departmentId) => {
+  try {
+    if (!hospitalId || !departmentId) {
+      throw new Error('Hospital ID and Department ID are required');
+    }
+
+    // Check if there are any admitted patients in this department
+    const patientsRef = collection(db, 'hospitals', hospitalId, 'upcomingPatients');
+    const q = query(patientsRef, 
+      where('departmentId', '==', departmentId),
+      where('status', '==', 'Admitted')
+    );
+    const snapshot = await getDocs(q);
+
+    if (!snapshot.empty) {
+      throw new Error('Cannot delete department with admitted patients');
+    }
+
+    const departmentRef = doc(db, 'hospitals', hospitalId, 'departments', departmentId);
+    await deleteDoc(departmentRef);
+
+    return true;
+  } catch (error) {
+    console.error('Error deleting department:', error);
+    throw error;
   }
 };

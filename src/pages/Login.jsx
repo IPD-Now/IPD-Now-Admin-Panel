@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Container,
@@ -15,6 +15,7 @@ import { useNavigate } from 'react-router-dom';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import HospitalIcon from '@mui/icons-material/LocalHospital';
+import LockIcon from '@mui/icons-material/Lock';
 import { toast } from 'react-toastify';
 import { authenticateHospital } from '../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -113,6 +114,17 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    // Check for locked hospital ID in localStorage and set it
+    const locked = localStorage.getItem('lockedHospitalId');
+    if (locked) {
+      setFormData(prev => ({
+        ...prev,
+        hospitalId: locked
+      }));
+    }
+  }, []);
+
   const validateForm = () => {
     const newErrors = {};
     if (!formData.hospitalId.trim()) {
@@ -129,6 +141,10 @@ const Login = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    // If hospital ID is locked, prevent changes to it
+    if (name === 'hospitalId' && localStorage.getItem('lockedHospitalId')) {
+      return;
+    }
     setFormData(prev => ({
       ...prev,
       [name]: value
@@ -153,7 +169,7 @@ const Login = () => {
     
     try {
       const hospitalData = await authenticateHospital(formData.hospitalId, formData.password);
-      login(hospitalData); // Use the auth context login
+      login(hospitalData);
       toast.success('Login successful!');
       navigate('/dashboard');
     } catch (error) {
@@ -167,6 +183,9 @@ const Login = () => {
       setLoading(false);
     }
   };
+
+  // Check if hospital ID is locked
+  const isHospitalIdLocked = Boolean(localStorage.getItem('lockedHospitalId'));
 
   return (
     <LoginWrapper>
@@ -217,7 +236,15 @@ const Login = () => {
               helperText={errors.hospitalId}
               variant="outlined"
               placeholder="Enter your hospital ID"
-              disabled={loading}
+              disabled={loading || isHospitalIdLocked}
+              InputProps={{
+                readOnly: isHospitalIdLocked,
+                startAdornment: isHospitalIdLocked && (
+                  <InputAdornment position="start">
+                    <LockIcon color="primary" fontSize="small" />
+                  </InputAdornment>
+                ),
+              }}
             />
             <StyledTextField
               fullWidth
@@ -256,6 +283,28 @@ const Login = () => {
               {loading ? 'Signing In...' : 'Sign In'}
             </LoginButton>
           </Box>
+
+          {isHospitalIdLocked && (
+            <Typography 
+              variant="caption" 
+              color="text.secondary" 
+              sx={{ 
+                mt: 3, 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                gap: 1,
+                backgroundColor: theme.palette.mode === 'dark' 
+                  ? 'rgba(76, 175, 80, 0.1)'
+                  : 'rgba(76, 175, 80, 0.08)',
+                padding: '8px 16px',
+                borderRadius: '8px',
+              }}
+            >
+              <LockIcon fontSize="small" />
+              The Hospital ID is Locked To This Device
+            </Typography>
+          )}
 
           <Typography 
             variant="caption" 

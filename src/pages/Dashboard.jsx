@@ -19,13 +19,33 @@ import {
   ListItem,
   ListItemText,
   ListItemSecondaryAction,
+  Fab,
+  Divider,
+  Tab,
+  Tabs,
+  Menu,
+  MenuItem,
+  DialogContentText,
 } from '@mui/material';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import RemoveRoundedIcon from '@mui/icons-material/RemoveRounded';
 import LocalHospitalRoundedIcon from '@mui/icons-material/LocalHospitalRounded';
 import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
+import EditRoundedIcon from '@mui/icons-material/EditRounded';
+import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
+import SettingsIcon from '@mui/icons-material/Settings';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import AddCircleIcon from '@mui/icons-material/AddCircle';
 import { usePatientsContext } from '../context/PatientsContext';
-import { getDepartments, updateDepartmentBeds } from '../firebase';
+import { 
+  getDepartments, 
+  updateDepartmentBeds, 
+  getHospitalDetails,
+  updateHospitalDetails,
+  addDepartment,
+  updateDepartment,
+  deleteDepartment,
+} from '../firebase';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 
@@ -64,6 +84,42 @@ const BedCount = styled(Typography)(({ theme }) => ({
 const StyledChip = styled(Chip)(({ theme }) => ({
   borderRadius: theme.shape.borderRadius,
   fontWeight: 500,
+}));
+
+const EditFab = styled(Fab)(({ theme }) => ({
+  position: 'fixed',
+  bottom: 80,
+  right: 16,
+  backgroundColor: theme.palette.primary.main,
+  '&:hover': {
+    backgroundColor: theme.palette.primary.dark,
+  },
+}));
+
+const TabPanel = ({ children, value, index, ...other }) => (
+  <div
+    role="tabpanel"
+    hidden={value !== index}
+    id={`edit-tabpanel-${index}`}
+    aria-labelledby={`edit-tab-${index}`}
+    {...other}
+  >
+    {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+  </div>
+);
+
+const AddDepartmentCard = styled(Card)(({ theme }) => ({
+  height: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  cursor: 'pointer',
+  border: `2px dashed ${theme.palette.primary.main}`,
+  backgroundColor: 'transparent',
+  transition: 'all 0.3s ease',
+  '&:hover': {
+    backgroundColor: 'rgba(3, 123, 65, 0.05)',
+  },
 }));
 
 const initialDepartments = [
@@ -126,7 +182,8 @@ const initialDepartments = [
 const Dashboard = () => {
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [newDepartment, setNewDepartment] = useState({
     name: '',
     mainDoctor: '',
@@ -136,6 +193,13 @@ const Dashboard = () => {
   const [errors, setErrors] = useState({});
   const { admittedPatients, dischargedPatients } = usePatientsContext();
   const navigate = useNavigate();
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [departmentToDelete, setDepartmentToDelete] = useState(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [nameDialogOpen, setNameDialogOpen] = useState(false);
+  const [departmentName, setDepartmentName] = useState('');
+  const [nameError, setNameError] = useState('');
+  const [isSecondStep, setIsSecondStep] = useState(false);
 
   useEffect(() => {
     const checkAuth = () => {
@@ -150,12 +214,14 @@ const Dashboard = () => {
       return true;
     };
 
-    const fetchDepartments = async () => {
+    const fetchData = async () => {
       if (!checkAuth()) return;
       
       setLoading(true);
       try {
         const hospitalId = localStorage.getItem('hospitalId');
+        
+        // Fetch departments
         const fetchedDepartments = await getDepartments(hospitalId);
         const departmentsWithStatus = fetchedDepartments.map(dept => ({
           ...dept,
@@ -163,15 +229,15 @@ const Dashboard = () => {
         }));
         setDepartments(departmentsWithStatus);
       } catch (error) {
-        console.error('Error fetching departments:', error);
-        toast.error('Failed to load departments');
+        console.error('Error fetching data:', error);
+        toast.error('Failed to load data');
         setDepartments([]);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchDepartments();
+    fetchData();
   }, [navigate]);
 
   useEffect(() => {
@@ -245,36 +311,182 @@ const Dashboard = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleAddDepartment = () => {
-    if (!validateDepartment()) return;
-
-    const newDept = {
-      id: Date.now(),
-      ...newDepartment,
-      availableBeds: parseInt(newDepartment.totalBeds),
-      totalBeds: parseInt(newDepartment.totalBeds),
-      status: 'Active',
-    };
-
-    setDepartments([...departments, newDept]);
-    setNewDepartment({
-      name: '',
-      mainDoctor: '',
-      assistantDoctor: '',
-      totalBeds: '',
-    });
-    setErrors({});
+  const handleAddNewClick = () => {
+    setDepartmentName('');
+    setNameError('');
+    setNameDialogOpen(true);
+    setIsSecondStep(false);
   };
 
-  const handleRemoveDepartment = (id) => {
-    setDepartments(departments.filter(dept => dept.id !== id));
+  const handleNameSubmit = async () => {
+    if (!departmentName.trim()) {
+      setNameError('Department name is required');
+      return;
+    }
+
+    try {
+      const hospitalId = localStorage.getItem('hospitalId');
+      
+      // Create initial document with just the name
+      await addDepartment(hospitalId, departmentName.trim(), {
+        status: 'Active'
+      });
+
+      // Close name dialog and open details dialog
+      setNameDialogOpen(false);
+      setIsSecondStep(true);
+      setNewDepartment({
+        name: departmentName.trim(),
+        mainDoctor: '',
+        assistantDoctor: '',
+        totalBeds: '',
+      });
+      setEditDialogOpen(true);
+    } catch (error) {
+      if (error.message.includes('already exists')) {
+        setNameError('A department with this name already exists');
+      } else {
+        console.error('Creation error:', error);
+        toast.error('Failed to create department');
+      }
+    }
+  };
+
+  const handleAddDepartment = async () => {
+    if (!validateDepartment()) return;
+
+    try {
+      const hospitalId = localStorage.getItem('hospitalId');
+      const departmentData = {
+        name: newDepartment.name,
+        mainDoctor: newDepartment.mainDoctor,
+        assistantDoctor: newDepartment.assistantDoctor,
+        totalBeds: parseInt(newDepartment.totalBeds),
+        availableBeds: parseInt(newDepartment.totalBeds),
+        status: 'Active',
+      };
+
+      // Update the existing document with full details
+      await updateDepartment(hospitalId, departmentData.name, departmentData);
+      
+      // Update local state with the new department
+      setDepartments([...departments, { 
+        id: departmentData.name,  // Use name as ID
+        ...departmentData 
+      }]);
+      
+      setNewDepartment({
+        name: '',
+        mainDoctor: '',
+        assistantDoctor: '',
+        totalBeds: '',
+      });
+      setEditDialogOpen(false);
+      setIsSecondStep(false);
+      toast.success('Department added successfully');
+    } catch (error) {
+      console.error('Add department error:', error);
+      toast.error('Failed to add department details');
+    }
+  };
+
+  const handleEditDepartment = async (department) => {
+    setSelectedDepartment(department);
+    setNewDepartment({
+      name: department.name,
+      mainDoctor: department.mainDoctor,
+      assistantDoctor: department.assistantDoctor,
+      totalBeds: department.totalBeds.toString(),
+    });
+    setEditDialogOpen(true);
+  };
+
+  const handleUpdateDepartment = async () => {
+    if (!validateDepartment() || !selectedDepartment) return;
+
+    try {
+      const hospitalId = localStorage.getItem('hospitalId');
+      const departmentData = {
+        ...newDepartment,
+        totalBeds: parseInt(newDepartment.totalBeds),
+      };
+
+      await updateDepartment(hospitalId, selectedDepartment.id, departmentData);
+      
+      setDepartments(departments.map(dept => 
+        dept.id === selectedDepartment.id 
+          ? { ...dept, ...departmentData }
+          : dept
+      ));
+
+      setSelectedDepartment(null);
+      setNewDepartment({
+        name: '',
+        mainDoctor: '',
+        assistantDoctor: '',
+        totalBeds: '',
+      });
+      setEditDialogOpen(false);
+      toast.success('Department updated successfully');
+    } catch (error) {
+      toast.error('Failed to update department');
+    }
+  };
+
+  const toggleEditMode = () => {
+    setIsEditMode(!isEditMode);
+    if (isEditMode) {
+      // Clean up when exiting edit mode
+      setSelectedDepartment(null);
+      setNewDepartment({
+        name: '',
+        mainDoctor: '',
+        assistantDoctor: '',
+        totalBeds: '',
+      });
+    }
+  };
+
+  const handleDeleteClick = (department) => {
+    setDepartmentToDelete(department);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!departmentToDelete) return;
+
+    try {
+      const hospitalId = localStorage.getItem('hospitalId');
+      await deleteDepartment(hospitalId, departmentToDelete.id);
+      setDepartments(departments.filter(dept => dept.id !== departmentToDelete.id));
+      toast.success('Department deleted successfully');
+    } catch (error) {
+      if (error.message.includes('admitted patients')) {
+        toast.error('Cannot delete department with admitted patients');
+      } else {
+        toast.error('Failed to delete department');
+      }
+    } finally {
+      setDeleteConfirmOpen(false);
+      setDepartmentToDelete(null);
+    }
   };
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom sx={{ mb: 4 }}>
-        Department Overview
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+        <Typography variant="h4">
+          Department Overview
+        </Typography>
+        <Button
+          variant="contained"
+          color={isEditMode ? "success" : "primary"}
+          startIcon={isEditMode ? <SaveRoundedIcon /> : <EditRoundedIcon />}
+          onClick={toggleEditMode}
+        >
+          {isEditMode ? 'Save' : 'Edit'}
+        </Button>
+      </Box>
 
       {loading ? (
         <Box sx={{ width: '100%', mt: 2 }}>
@@ -290,11 +502,41 @@ const Dashboard = () => {
                     <Typography variant="h6" gutterBottom color="primary" sx={{ fontWeight: 600 }}>
                       {department.name}
                     </Typography>
-                    <StyledChip
-                      label={department.status}
-                      color={department.status === 'Full' ? 'error' : 'success'}
-                      size="small"
-                    />
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      {isEditMode && (
+                        <>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleEditDepartment(department)}
+                            sx={{ 
+                              backgroundColor: 'rgba(3, 123, 65, 0.1)',
+                              '&:hover': {
+                                backgroundColor: 'rgba(3, 123, 65, 0.2)',
+                              }
+                            }}
+                          >
+                            <EditRoundedIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleDeleteClick(department)}
+                            sx={{ 
+                              backgroundColor: 'rgba(211, 47, 47, 0.1)',
+                              '&:hover': {
+                                backgroundColor: 'rgba(211, 47, 47, 0.2)',
+                              }
+                            }}
+                          >
+                            <DeleteRoundedIcon fontSize="small" />
+                          </IconButton>
+                        </>
+                      )}
+                      <StyledChip
+                        label={department.status}
+                        color={department.status === 'Full' ? 'error' : 'success'}
+                        size="small"
+                      />
+                    </Box>
                   </Box>
                   
                   <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -366,100 +608,166 @@ const Dashboard = () => {
               </DepartmentCard>
             </Grid>
           ))}
+
+          {isEditMode && (
+            <Grid item xs={12} sm={6} md={4}>
+              <AddDepartmentCard onClick={handleAddNewClick}>
+                <Box sx={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  alignItems: 'center',
+                  gap: 2,
+                  p: 3 
+                }}>
+                  <AddCircleIcon sx={{ fontSize: 64, color: 'primary.main' }} />
+                  <Typography variant="h6" color="primary.main">
+                    Add Department
+                  </Typography>
+                </Box>
+              </AddDepartmentCard>
+            </Grid>
+          )}
         </Grid>
       )}
 
+      {/* Name Dialog */}
       <Dialog
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
+        open={nameDialogOpen}
+        onClose={() => {
+          setNameDialogOpen(false);
+          setDepartmentName('');
+          setNameError('');
+        }}
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>Manage Departments</DialogTitle>
-        <DialogContent>
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="subtitle1" gutterBottom>
-              Add New Department
-            </Typography>
-            <TextField
-              fullWidth
-              label="Department Name"
-              value={newDepartment.name}
-              onChange={(e) => setNewDepartment({ ...newDepartment, name: e.target.value })}
-              error={!!errors.name}
-              helperText={errors.name}
-              margin="normal"
-            />
-            <TextField
-              fullWidth
-              label="Main Doctor"
-              value={newDepartment.mainDoctor}
-              onChange={(e) => setNewDepartment({ ...newDepartment, mainDoctor: e.target.value })}
-              error={!!errors.mainDoctor}
-              helperText={errors.mainDoctor}
-              margin="normal"
-            />
-            <TextField
-              fullWidth
-              label="Assistant Doctor"
-              value={newDepartment.assistantDoctor}
-              onChange={(e) => setNewDepartment({ ...newDepartment, assistantDoctor: e.target.value })}
-              error={!!errors.assistantDoctor}
-              helperText={errors.assistantDoctor}
-              margin="normal"
-            />
-            <TextField
-              fullWidth
-              label="Total Beds"
-              type="number"
-              value={newDepartment.totalBeds}
-              onChange={(e) => setNewDepartment({ ...newDepartment, totalBeds: e.target.value })}
-              error={!!errors.totalBeds}
-              helperText={errors.totalBeds}
-              margin="normal"
-              InputProps={{ inputProps: { min: 1 } }}
-            />
-            <Button
-              variant="contained"
-              color="primary"
-              fullWidth
-              onClick={handleAddDepartment}
-              sx={{ mt: 2 }}
-            >
-              Add Department
-            </Button>
-          </Box>
-
-          {departments.length > 0 && (
-            <>
-              <Typography variant="subtitle1" gutterBottom sx={{ mt: 4 }}>
-                Existing Departments
-              </Typography>
-              <List>
-                {departments.map((dept) => (
-                  <ListItem key={dept.id}>
-                    <ListItemText
-                      primary={dept.name}
-                      secondary={`${dept.mainDoctor} | ${dept.totalBeds} beds`}
-                    />
-                    <ListItemSecondaryAction>
-                      <IconButton
-                        edge="end"
-                        aria-label="delete"
-                        onClick={() => handleRemoveDepartment(dept.id)}
-                        color="error"
-                      >
-                        <DeleteRoundedIcon />
-                      </IconButton>
-                    </ListItemSecondaryAction>
-                  </ListItem>
-                ))}
-              </List>
-            </>
-          )}
+        <DialogTitle>Enter Department Name</DialogTitle>
+        <DialogContent dividers>
+          <TextField
+            fullWidth
+            label="Department Name"
+            value={departmentName}
+            onChange={(e) => {
+              setDepartmentName(e.target.value);
+              setNameError('');
+            }}
+            error={!!nameError}
+            helperText={nameError}
+            margin="normal"
+            autoFocus
+          />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setSettingsOpen(false)}>Close</Button>
+          <Button onClick={() => setNameDialogOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={handleNameSubmit}
+          >
+            Next
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Details Dialog */}
+      <Dialog
+        open={editDialogOpen}
+        onClose={() => {
+          setEditDialogOpen(false);
+          setSelectedDepartment(null);
+          setNewDepartment({
+            name: '',
+            mainDoctor: '',
+            assistantDoctor: '',
+            totalBeds: '',
+          });
+          setErrors({});
+          setIsSecondStep(false);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {selectedDepartment ? 'Edit Department' : 'Add Department Details'}
+        </DialogTitle>
+        <DialogContent dividers>
+          <TextField
+            fullWidth
+            label="Department Name"
+            value={newDepartment.name}
+            margin="normal"
+            disabled={true}
+          />
+          <TextField
+            fullWidth
+            label="Main Doctor"
+            value={newDepartment.mainDoctor}
+            onChange={(e) => setNewDepartment({ ...newDepartment, mainDoctor: e.target.value })}
+            error={!!errors.mainDoctor}
+            helperText={errors.mainDoctor}
+            margin="normal"
+          />
+          <TextField
+            fullWidth
+            label="Assistant Doctor"
+            value={newDepartment.assistantDoctor}
+            onChange={(e) => setNewDepartment({ ...newDepartment, assistantDoctor: e.target.value })}
+            error={!!errors.assistantDoctor}
+            helperText={errors.assistantDoctor}
+            margin="normal"
+          />
+          <TextField
+            fullWidth
+            label="Total Beds"
+            type="number"
+            value={newDepartment.totalBeds}
+            onChange={(e) => setNewDepartment({ ...newDepartment, totalBeds: e.target.value })}
+            error={!!errors.totalBeds}
+            helperText={errors.totalBeds}
+            margin="normal"
+            InputProps={{ inputProps: { min: 1 } }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            setEditDialogOpen(false);
+            setIsSecondStep(false);
+          }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={selectedDepartment ? handleUpdateDepartment : handleAddDepartment}
+          >
+            {selectedDepartment ? 'Update Department' : 'Create Department'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={deleteConfirmOpen}
+        onClose={() => {
+          setDeleteConfirmOpen(false);
+          setDepartmentToDelete(null);
+        }}
+      >
+        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete the department "{departmentToDelete?.name}"? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            setDeleteConfirmOpen(false);
+            setDepartmentToDelete(null);
+          }}>
+            Cancel
+          </Button>
+          <Button onClick={handleDeleteConfirm} color="error" variant="contained">
+            Delete
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

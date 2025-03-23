@@ -15,6 +15,7 @@ import { CssBaseline } from '@mui/material';
 import 'react-toastify/dist/ReactToastify.css';
 import { useState, useEffect } from 'react';
 import LoadingScreen from './components/LoadingScreen';
+import { NotificationProvider } from './context/NotificationContext';
 
 function App() {
   const [isLoading, setIsLoading] = useState(true);
@@ -36,33 +37,35 @@ function App() {
     <ThemeProvider>
       <NotificationsProvider>
         <PatientsProvider>
-          <Router>
-            <AuthProvider>
-              <CssBaseline />
-              <ToastContainer position="bottom-center" />
-              <Routes>
-                <Route path="/login" element={<Login />} />
-                
-                <Route
-                  path="/"
-                  element={
-                    <ProtectedRoute>
-                      <Layout />
-                    </ProtectedRoute>
-                  }
-                >
-                  <Route index element={<Navigate to="/dashboard" replace />} />
-                  <Route path="dashboard" element={<Dashboard />} />
-                  <Route path="upcoming-patients" element={<UpcomingPatients />} />
-                  <Route path="about" element={<About />} />
-                  <Route path="contact" element={<Contact />} />
-                </Route>
+          <NotificationProvider>
+            <Router>
+              <AuthProvider>
+                <CssBaseline />
+                <ToastContainer position="bottom-center" />
+                <Routes>
+                  <Route path="/login" element={<Login />} />
+                  
+                  <Route
+                    path="/"
+                    element={
+                      <ProtectedRoute>
+                        <Layout />
+                      </ProtectedRoute>
+                    }
+                  >
+                    <Route index element={<Navigate to="/dashboard" replace />} />
+                    <Route path="dashboard" element={<Dashboard />} />
+                    <Route path="upcoming-patients" element={<UpcomingPatients />} />
+                    <Route path="about" element={<About />} />
+                    <Route path="contact" element={<Contact />} />
+                  </Route>
 
-                {/* Catch all route - redirect to dashboard if authenticated, login if not */}
-                <Route path="*" element={<Navigate to="/dashboard" replace />} />
-              </Routes>
-            </AuthProvider>
-          </Router>
+                  {/* Catch all route - redirect to dashboard if authenticated, login if not */}
+                  <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                </Routes>
+              </AuthProvider>
+            </Router>
+          </NotificationProvider>
         </PatientsProvider>
       </NotificationsProvider>
     </ThemeProvider>
